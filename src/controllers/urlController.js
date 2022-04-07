@@ -47,20 +47,33 @@ const createUrl = async function(req, res) {
         }
 
         const urlIsPresent = await urlModel.findOne({ longUrl: longUrl })
-        if (urlIsPresent) {
-            return res.status(200).send({ status: true, msg: `  ${urlIsPresent.shortUrl}  ,this is the short url that already created for this Long URL` })
-        }
+            // if (urlIsPresent) {
+            //     return res.status(200).send({
+            //         status: true,
+            //         msg: `  this is the short url that already created for this Long URL`,
+            //         data: {
+            //             urlCode: "urlIsPresent.urlCode ",
+            //             "shortUrl": urlIsPresent.shortUrl,
+            //             "longUrl": urlIsPresent.longUrl
+            //         }
+            //     })
+            // }
 
         const urlCode = shortid.generate().toLowerCase()
         const shortUrl = baseUrl + '/' + urlCode
 
         let cachedLongUrlData = await GET_ASYNC(`${urlIsPresent}`)
 
-        if (cachedLongUrlData) {
-            res.status(400).send({ status: false, message: "Data is already stored in Cache Memory" })
-        } else {
+        if (cachedLongUrlData || urlIsPresent) {
 
+            res.status(400).send({
+                status: false,
+                message: "Data is already stored in Cache Memory",
+                data: urlIsPresent
+            })
+        } else {
             await SET_ASYNC(`${longUrl}`, JSON.stringify(urlIsPresent))
+
             const urlCreated = await urlModel.create({ urlCode, longUrl, shortUrl })
             return res.status(201).send({ status: true, message: "Short Url created successfully!", data: urlCreated })
 
@@ -82,7 +95,7 @@ const getUrl = async function(req, res) {
             return res.status(400).send({ status: false, message: "plz provide URL Code in params" });;
         }
 
-        isUrlCodePresent = await urlModel.findOne({ urlCode: urlCode })
+        const isUrlCodePresent = await urlModel.findOne({ urlCode: urlCode })
 
         if (!isUrlCodePresent) {
             return res.status(404).send({ status: false, msg: "Url not found with this urlCode" })
