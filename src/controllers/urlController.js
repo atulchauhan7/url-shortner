@@ -3,6 +3,13 @@ const shortid = require('shortid')
 const redis = require("redis");
 const { promisify } = require("util");
 
+const isValid = function(value) {
+    if (typeof value === 'undefined' || value === null) return false
+    if (typeof value === 'string' && value.trim().length === 0) return false
+    return true
+};
+
+const isValidUrl = /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})/
 
 //**************************************Connect to redis**************************************//
 
@@ -27,21 +34,22 @@ const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
 //**************************************URL create**************************************//
 const createUrl = async function(req, res) {
         try {
-            const data = req.body
-            const { longUrl } = data
-            const baseUrl = "http://localhost:3000/"
 
-            if (Object.keys(data).length == 0) {
-                return res.status(400).send({ status: false, message: "please put some data in the body" })
-            }
+            const longUrl = req.body.longUrl
+            const baseUrl = "http://localhost:3000/"
 
             // VALIDATING LONG-URL:
 
-            if (!data.longUrl) {
-                return res.status(400).send({ status: false, msg: "longUrl is not present" })
+
+            if (!isValid(longUrl)) {
+                return res.status(400).send({ status: false, msg: "url is required" })
             }
 
-            if (data.longUrl.trim().length == 0) {
+            if (!(isValidUrl.test(longUrl))) {
+                return res.status(400).send({ status: false, msg: "enter valid url" })
+            }
+
+            if (longUrl.trim().length == 0) {
                 return res.status(400).send({ status: false, msg: "enter the longUrl in proper format" })
             }
 
@@ -61,17 +69,17 @@ const createUrl = async function(req, res) {
 
                 // GENRATING URL-CODE:
 
-                data.urlCode = shortid.generate().toLowerCase()
+                const urlCode = shortid.generate().toLowerCase()
 
                 // VALIDATING SHORT-URL:
 
-                data.shortUrl = baseUrl + `${data.urlCode}`
-                console.log(data.shortUrl)
+                const shortUrl = baseUrl + urlCode
 
                 // CACHEING OF THE TOTAL DATA:
 
-                const SavedUrl = await urlModel.create(data)
-                return res.status(201).send({ status: true, msg: "url-shortend", data: { "longUrl": SavedUrl.longUrl, "shortUrl": SavedUrl.shortUrl, "urlCode": SavedUrl.urlCode } })
+                const urlCreated = await urlModel.create({ urlCode, longUrl, shortUrl })
+                return res.status(201).send({ status: true, message: "Short Url created successfully!", data: urlCreated })
+
             }
 
         } catch (error) {
@@ -85,13 +93,17 @@ const getUrl = async function(req, res) {
 
         let urlCode = req.params.urlCode
 
-        let urlFromCache = await GET_ASYNC(`${urlCode}`)
+        let urlFromCache = await GET_ASYNC(`
+                $ { urlCode }
+                `)
         if (urlFromCache) {
             return res.status(302).redirect(JSON.parse(urlFromCache))
         } else {
             let urlFromMongoDB = await urlModel.findOne({ urlCode: urlCode });
             if (urlFromMongoDB) {
-                await SET_ASYNC(`${urlCode}`, JSON.stringify(urlFromMongoDB.longUrl))
+                await SET_ASYNC(`
+                $ { urlCode }
+                `, JSON.stringify(urlFromMongoDB.longUrl))
                 return res.status(302).redirect(urlFromMongoDB.longUrl);
             } else {
                 return res.status(404).send({ status: false, msg: "No url found " })
